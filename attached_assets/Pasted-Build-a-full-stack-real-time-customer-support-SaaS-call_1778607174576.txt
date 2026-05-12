@@ -1,0 +1,154 @@
+Build a full-stack real-time customer support SaaS called "SupportDesk" using the MERN stack.
+
+--- WHAT IT IS ---
+A customer support chat platform. Businesses sign up, get an embeddable chat widget (a <script> tag), paste it on their website, and visitors can chat live with support agents. If no agent is online, a built-in FAQ bot replies automatically by searching a knowledge base stored in MongoDB.
+
+--- CORE FEATURES ---
+
+1. JWT Auth
+   - Register/login for agents and workspace admins
+   - Role-based access: Admin, Agent
+
+2. Embeddable Chat Widget
+   - A standalone /widget/:workspaceId page rendered as a floating chat bubble
+   - Visitor enters name + email, then starts chatting
+   - Real-time messaging via Socket.io
+   - Typing indicator when agent is typing
+   - Embed via a <script> tag snippet (iframe-based)
+
+3. Agent Inbox Dashboard
+   - Left sidebar lists all open conversations, updates in real-time
+   - New conversations appear instantly without page refresh
+   - Agent clicks a conversation to open and reply
+   - Shows visitor name, email, page URL they came from, and timestamp
+   - Conversation status: Open / In Progress / Resolved
+   - Unread message badge count per conversation
+
+4. Real-time Messaging (Socket.io)
+   - Socket.io rooms per conversation ID
+   - Typing indicators on both sides (visitor and agent)
+   - Read receipts (seen checkmarks)
+   - Agent online/offline status shown to visitor in widget
+
+5. FAQ Bot (NO external API — fully built-in)
+   - Each workspace has its own Knowledge Base: a collection of Question + Answer pairs stored in MongoDB
+   - When a visitor sends a message and no agent is online or assigned, the bot searches the knowledge base using simple keyword matching (split message into words, find the FAQ entry with the most word matches)
+   - Bot replies instantly with the matched answer, or a fallback message: "I didn't find an answer for that. An agent will be with you shortly."
+   - Bot messages are clearly labeled "Bot" with a robot icon in the widget
+   - Admins can manage the knowledge base from Settings: add, edit, delete Q&A pairs
+   - Seed each new workspace with 10 default FAQ entries (e.g. "What are your business hours?", "How do I reset my password?", "How do I contact support?", "What is your refund policy?" etc.)
+
+6. Canned Responses
+   - Agents save and reuse common reply templates
+   - Type / in the reply box to trigger a picker showing saved canned responses
+   - Click to insert into reply box
+
+7. Analytics Dashboard
+   - Total conversations today and this week
+   - Average first response time
+   - Resolution rate (resolved vs total) shown as percentage
+   - Conversations by status: pie chart using Recharts
+   - Bot vs Agent handled conversations: bar chart using Recharts
+   - Agent activity: list of agents with conversation count
+
+8. Workspace Settings Page
+   - Customize widget primary color, greeting message, and bot name
+   - Copy-paste embed script snippet (auto-generated based on workspaceId)
+   - Invite agents by email
+   - Knowledge Base manager: table of Q&A pairs with Add / Edit / Delete
+
+9. Visitor Info Panel
+   - When agent opens a conversation, right sidebar shows visitor details:
+     name, email, page they came from, browser, time of first message, total messages sent
+
+10. Stripe Billing
+    - Free plan: 1 agent, 100 conversations/month, 10 FAQ entries
+    - Pro plan: $19/mo, unlimited agents, unlimited conversations, unlimited FAQ entries
+
+--- TECH STACK ---
+Frontend: React.js, Tailwind CSS, React Router v6, Socket.io-client, React Query, Recharts, Lucide React (icons)
+Backend: Node.js, Express.js, Mongoose (MongoDB), Socket.io, JWT, bcrypt, Stripe SDK
+Database: MongoDB Atlas via MONGO_URI env var
+No external AI API — bot logic is pure JavaScript keyword matching against MongoDB
+
+--- FOLDER STRUCTURE ---
+/client                  → React frontend (agent dashboard + widget)
+/client/src/pages        → Dashboard, Conversation, Analytics, Settings, Login, Register, Widget
+/client/src/components   → ChatWindow, ConversationList, BotMessage, AgentMessage, VisitorPanel
+/server                  → Node/Express backend
+/server/routes           → auth, conversations, messages, workspace, faq, analytics, billing
+/server/socket           → Socket.io event handlers (separate file)
+/server/models           → User, Workspace, Conversation, Message, FAQ, CannedResponse
+/server/utils            → botReply.js (keyword matching logic)
+.env                     → MONGO_URI, JWT_SECRET, STRIPE_SECRET_KEY, CLIENT_URL
+
+--- MONGODB COLLECTIONS ---
+Users         → name, email, password, role, workspaceId, isOnline
+Workspaces    → name, ownerId, widgetColor, greetingMessage, botName, plan
+Conversations → workspaceId, visitorName, visitorEmail, sourcePage, status, assignedAgent, createdAt
+Messages      → conversationId, sender (visitor/agent/bot), content, createdAt, seen
+FAQs          → workspaceId, question, answer, keywords[ ] (array of words for matching)
+CannedResponses → workspaceId, title, content
+
+--- BOT REPLY LOGIC (server/utils/botReply.js) ---
+function botReply(userMessage, faqList) {
+  const words = userMessage.toLowerCase().split(' ');
+  let bestMatch = null;
+  let highestScore = 0;
+  for (const faq of faqList) {
+    const score = faq.keywords.filter(k => words.includes(k)).length;
+    if (score > highestScore) {
+      highestScore = score;
+      bestMatch = faq;
+    }
+  }
+  if (highestScore === 0) return "I didn't find an answer for that. An agent will be with you shortly.";
+  return bestMatch.answer;
+}
+
+--- SOCKET.IO EVENTS ---
+conversation:new          → new visitor starts chat
+message:send              → visitor or agent sends message
+message:receive           → deliver message to room
+agent:typing              → agent is typing
+visitor:typing            → visitor is typing
+agent:join                → agent opens a conversation
+conversation:resolve      → conversation marked resolved
+agent:online              → agent comes online
+agent:offline             → agent goes offline
+notify:new                → push notification to agent inbox
+
+--- PAGES ---
+/login                    → Agent login
+/register                 → Admin register (creates workspace)
+/dashboard                → Main inbox (conversation list + chat window)
+/analytics                → Stats, charts, agent activity
+/settings                 → Widget config, embed code, FAQ manager, billing
+/widget/:workspaceId      → Public embeddable chat widget (no auth required)
+
+--- UI DESIGN ---
+Overall feel: Intercom / Crisp style. Professional SaaS.
+
+Dashboard layout:
+- Left sidebar (260px, dark bg #0F172A): Logo, nav icons, conversation list with unread badges
+- Center panel: Active chat window with message bubbles (visitor = gray left, agent = blue right, bot = purple left with robot icon)
+- Right sidebar (280px): Visitor info panel (name, email, source page, browser, time)
+
+Widget (visitor side):
+- Bottom-right floating bubble button in workspace primary color
+- Opens a clean chat panel (380px wide, 520px tall)
+- Header shows bot name + online/offline dot
+- Message bubbles, typing indicator (animated dots), input + send button
+- Feels like Intercom's widget — polished and real
+
+Colors: Use Tailwind slate-900 for sidebars, white for chat area, indigo-600 as default accent. Support custom widget color per workspace.
+
+--- SEED DATA ---
+On first run seed:
+- 1 demo workspace called "Acme Corp"
+- 2 agents: admin@acme.com (Admin) and agent@acme.com (Agent), password: demo1234
+- 10 FAQ entries with keywords
+- 5 demo conversations (mix of open, in-progress, resolved) with realistic messages
+- 3 canned responses
+
+Make sure the widget page at /widget/:workspaceId works standalone and looks polished enough to screenshot as a portfolio piece.
