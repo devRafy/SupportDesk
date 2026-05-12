@@ -3,20 +3,36 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: SupportDesk API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: conversations
+    description: Conversation management
+  - name: messages
+    description: Message operations
+  - name: workspace
+    description: Workspace settings
+  - name: faqs
+    description: FAQ knowledge base
+  - name: canned
+    description: Canned responses
+  - name: analytics
+    description: Analytics and reporting
+  - name: billing
+    description: Stripe billing
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +40,951 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Auth ──────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register admin + workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Bad request
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Agent/admin login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Unauthorized
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+
+  /auth/agents:
+    get:
+      operationId: listAgents
+      tags: [auth]
+      summary: List agents in workspace
+      responses:
+        "200":
+          description: Agents list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+
+  /auth/invite:
+    post:
+      operationId: inviteAgent
+      tags: [auth]
+      summary: Invite agent by email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteInput"
+      responses:
+        "201":
+          description: Agent invited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  # ── Conversations ─────────────────────────────────────────────────────────
+  /conversations:
+    get:
+      operationId: listConversations
+      tags: [conversations]
+      summary: List conversations for workspace
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conversation"
+    post:
+      operationId: createConversation
+      tags: [conversations]
+      summary: Start a new visitor conversation (widget)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+
+  /conversations/{id}:
+    get:
+      operationId: getConversation
+      tags: [conversations]
+      summary: Get a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "404":
+          description: Not found
+
+  /conversations/{id}/status:
+    patch:
+      operationId: updateConversationStatus
+      tags: [conversations]
+      summary: Update conversation status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationStatusUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+
+  /conversations/{id}/assign:
+    patch:
+      operationId: assignConversation
+      tags: [conversations]
+      summary: Assign conversation to agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignInput"
+      responses:
+        "200":
+          description: Assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+
+  # ── Messages ──────────────────────────────────────────────────────────────
+  /conversations/{id}/messages:
+    get:
+      operationId: listMessages
+      tags: [messages]
+      summary: Get messages for a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+    post:
+      operationId: sendMessage
+      tags: [messages]
+      summary: Send a message (agent or visitor)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "201":
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+
+  /conversations/{id}/messages/read:
+    patch:
+      operationId: markMessagesRead
+      tags: [messages]
+      summary: Mark all messages in conversation as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Marked read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  # ── Workspace ─────────────────────────────────────────────────────────────
+  /workspace:
+    get:
+      operationId: getWorkspace
+      tags: [workspace]
+      summary: Get current workspace settings
+      responses:
+        "200":
+          description: Workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+    patch:
+      operationId: updateWorkspace
+      tags: [workspace]
+      summary: Update workspace settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+
+  /workspace/public/{workspaceId}:
+    get:
+      operationId: getPublicWorkspace
+      tags: [workspace]
+      summary: Get public workspace info for widget (no auth)
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Public workspace info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicWorkspace"
+
+  # ── FAQs ─────────────────────────────────────────────────────────────────
+  /faqs:
+    get:
+      operationId: listFaqs
+      tags: [faqs]
+      summary: List FAQs for workspace
+      responses:
+        "200":
+          description: FAQs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Faq"
+    post:
+      operationId: createFaq
+      tags: [faqs]
+      summary: Create a FAQ entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FaqInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Faq"
+
+  /faqs/{id}:
+    patch:
+      operationId: updateFaq
+      tags: [faqs]
+      summary: Update a FAQ entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FaqUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Faq"
+    delete:
+      operationId: deleteFaq
+      tags: [faqs]
+      summary: Delete a FAQ entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Canned Responses ──────────────────────────────────────────────────────
+  /canned:
+    get:
+      operationId: listCanned
+      tags: [canned]
+      summary: List canned responses
+      responses:
+        "200":
+          description: Canned responses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CannedResponse"
+    post:
+      operationId: createCanned
+      tags: [canned]
+      summary: Create canned response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CannedInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CannedResponse"
+
+  /canned/{id}:
+    patch:
+      operationId: updateCanned
+      tags: [canned]
+      summary: Update canned response
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CannedUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CannedResponse"
+    delete:
+      operationId: deleteCanned
+      tags: [canned]
+      summary: Delete canned response
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Analytics ─────────────────────────────────────────────────────────────
+  /analytics/summary:
+    get:
+      operationId: getAnalyticsSummary
+      tags: [analytics]
+      summary: Get analytics summary (today + this week)
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsSummary"
+
+  /analytics/agents:
+    get:
+      operationId: getAgentActivity
+      tags: [analytics]
+      summary: Agent activity stats
+      responses:
+        "200":
+          description: Agent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentActivity"
+
+  # ── Billing ───────────────────────────────────────────────────────────────
+  /billing/plans:
+    get:
+      operationId: listPlans
+      tags: [billing]
+      summary: List available billing plans
+      responses:
+        "200":
+          description: Plans
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Plan"
+
+  /billing/checkout:
+    post:
+      operationId: createCheckout
+      tags: [billing]
+      summary: Create Stripe checkout session for Pro plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutInput"
+      responses:
+        "200":
+          description: Checkout URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutResponse"
+
+  /billing/portal:
+    post:
+      operationId: createPortal
+      tags: [billing]
+      summary: Create Stripe billing portal session
+      responses:
+        "200":
+          description: Portal URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalResponse"
+
+  /billing/webhook:
+    post:
+      operationId: stripeWebhook
+      tags: [billing]
+      summary: Stripe webhook handler
+      responses:
+        "200":
+          description: OK
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+
+    # ── Auth ──────────────────────────────────────────────────────────────
+    RegisterInput:
+      type: object
+      required: [name, email, password, workspaceName]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        workspaceName:
+          type: string
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    InviteInput:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+
+    User:
+      type: object
+      required: [id, name, email, role, workspaceId, isOnline, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        workspaceId:
+          type: integer
+        isOnline:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    AuthResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    # ── Workspace ─────────────────────────────────────────────────────────
+    Workspace:
+      type: object
+      required: [id, name, ownerId, widgetColor, greetingMessage, botName, plan, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        ownerId:
+          type: integer
+        widgetColor:
+          type: string
+        greetingMessage:
+          type: string
+        botName:
+          type: string
+        plan:
+          type: string
+        stripeCustomerId:
+          type: ["string", "null"]
+        stripeSubscriptionId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    WorkspaceUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        widgetColor:
+          type: string
+        greetingMessage:
+          type: string
+        botName:
+          type: string
+
+    PublicWorkspace:
+      type: object
+      required: [id, name, widgetColor, greetingMessage, botName, agentsOnline]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        widgetColor:
+          type: string
+        greetingMessage:
+          type: string
+        botName:
+          type: string
+        agentsOnline:
+          type: boolean
+
+    # ── Conversations ─────────────────────────────────────────────────────
+    Conversation:
+      type: object
+      required: [id, workspaceId, visitorName, visitorEmail, sourcePage, status, createdAt, unreadCount]
+      properties:
+        id:
+          type: integer
+        workspaceId:
+          type: integer
+        visitorName:
+          type: string
+        visitorEmail:
+          type: string
+        sourcePage:
+          type: string
+        browser:
+          type: ["string", "null"]
+        status:
+          type: string
+        assignedAgentId:
+          type: ["integer", "null"]
+        assignedAgent:
+          $ref: "#/components/schemas/User"
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        unreadCount:
+          type: integer
+        lastMessage:
+          type: ["string", "null"]
+
+    ConversationInput:
+      type: object
+      required: [workspaceId, visitorName, visitorEmail, sourcePage]
+      properties:
+        workspaceId:
+          type: integer
+        visitorName:
+          type: string
+        visitorEmail:
+          type: string
+        sourcePage:
+          type: string
+        browser:
+          type: string
+
+    ConversationStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    AssignInput:
+      type: object
+      required: [agentId]
+      properties:
+        agentId:
+          type: integer
+
+    # ── Messages ──────────────────────────────────────────────────────────
+    Message:
+      type: object
+      required: [id, conversationId, sender, senderType, content, seen, createdAt]
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+        sender:
+          type: string
+        senderType:
+          type: string
+        content:
+          type: string
+        seen:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    MessageInput:
+      type: object
+      required: [content, senderType]
+      properties:
+        content:
+          type: string
+        senderType:
+          type: string
+        sender:
+          type: string
+
+    # ── FAQs ─────────────────────────────────────────────────────────────
+    Faq:
+      type: object
+      required: [id, workspaceId, question, answer, keywords, createdAt]
+      properties:
+        id:
+          type: integer
+        workspaceId:
+          type: integer
+        question:
+          type: string
+        answer:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    FaqInput:
+      type: object
+      required: [question, answer, keywords]
+      properties:
+        question:
+          type: string
+        answer:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+
+    FaqUpdate:
+      type: object
+      properties:
+        question:
+          type: string
+        answer:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+
+    # ── Canned Responses ──────────────────────────────────────────────────
+    CannedResponse:
+      type: object
+      required: [id, workspaceId, title, content, createdAt]
+      properties:
+        id:
+          type: integer
+        workspaceId:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CannedInput:
+      type: object
+      required: [title, content]
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+
+    CannedUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+
+    # ── Analytics ─────────────────────────────────────────────────────────
+    AnalyticsSummary:
+      type: object
+      required: [totalToday, totalThisWeek, avgFirstResponseMs, resolutionRate, byStatus, botVsAgent]
+      properties:
+        totalToday:
+          type: integer
+        totalThisWeek:
+          type: integer
+        avgFirstResponseMs:
+          type: ["number", "null"]
+        resolutionRate:
+          type: number
+        byStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCount"
+        botVsAgent:
+          type: array
+          items:
+            $ref: "#/components/schemas/BotVsAgentCount"
+
+    StatusCount:
+      type: object
+      required: [status, count]
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+
+    BotVsAgentCount:
+      type: object
+      required: [type, count]
+      properties:
+        type:
+          type: string
+        count:
+          type: integer
+
+    AgentActivity:
+      type: object
+      required: [agentId, name, email, conversationCount, isOnline]
+      properties:
+        agentId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        conversationCount:
+          type: integer
+        isOnline:
+          type: boolean
+
+    # ── Billing ───────────────────────────────────────────────────────────
+    Plan:
+      type: object
+      required: [id, name, price, features]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        features:
+          type: array
+          items:
+            type: string
+
+    CheckoutInput:
+      type: object
+      required: [successUrl, cancelUrl]
+      properties:
+        successUrl:
+          type: string
+        cancelUrl:
+          type: string
+
+    CheckoutResponse:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+
+    PortalResponse:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
