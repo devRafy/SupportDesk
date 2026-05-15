@@ -23,11 +23,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Trash2, Plus, Pencil, ExternalLink, Copy, Check, Star, Zap } from "lucide-react";
 
 function useCopy() {
-  const [copied, setCopied] = useState(false);
-  const copy = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = (text: string, key?: string) => {
+    navigator.clipboard.writeText(text).then(() => { setCopied(key ?? text); setTimeout(() => setCopied(null), 2000); });
   };
-  return { copied, copy };
+  const wasCopied = (key?: string) => copied === (key ?? null) || copied === key;
+  return { wasCopied, copy };
 }
 
 export default function Settings() {
@@ -58,7 +59,7 @@ export default function Settings() {
   const [faqForm, setFaqForm] = useState({ question: "", answer: "" });
   const [cannedModal, setCannedModal] = useState<{ open: boolean; item?: CannedResponse }>({ open: false });
   const [cannedForm, setCannedForm] = useState({ title: "", content: "" });
-  const { copied, copy } = useCopy();
+  const { wasCopied, copy } = useCopy();
 
   useEffect(() => { if (workspace) setWsName(workspace.name); }, [workspace]);
 
@@ -231,15 +232,46 @@ export default function Settings() {
                 <CardContent className="space-y-3">
                   <div className="relative">
                     <pre className="bg-muted text-sm p-4 rounded-lg overflow-x-auto pr-12 font-mono text-xs">{widgetSnippet}</pre>
-                    <Button size="icon" variant="ghost" className="absolute top-2 right-2 h-7 w-7" onClick={() => copy(widgetSnippet)}>
-                      {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    <Button size="icon" variant="ghost" className="absolute top-2 right-2 h-7 w-7" onClick={() => copy(widgetSnippet, "snippet")}>
+                      {wasCopied("snippet") ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Direct chat link</CardTitle>
+                  <CardDescription>Share this link with customers — they click it, fill in their name and email, and start chatting right away. No website needed.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 flex items-center gap-2 bg-muted rounded-lg px-3 py-2 min-w-0">
+                      <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-xs font-mono truncate text-foreground">
+                        {window.location.origin}/widget/{workspace?.id}
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => copy(`${window.location.origin}/widget/${workspace?.id}`, "link")}
+                    >
+                      {wasCopied("link") ? <><Check className="w-3.5 h-3.5 mr-1.5 text-green-500" />Copied!</> : <><Copy className="w-3.5 h-3.5 mr-1.5" />Copy link</>}
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="shrink-0"
+                      asChild
+                    >
+                      <a href={`/widget/${workspace?.id}`} target="_blank" rel="noreferrer">
+                        <ExternalLink className="w-3.5 h-3.5 mr-1.5" />Open
+                      </a>
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Or open the widget directly at{" "}
-                    <a href={`/widget/${workspace?.id}`} target="_blank" rel="noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">
-                      /widget/{workspace?.id} <ExternalLink className="w-3 h-3" />
-                    </a>
+                    You can also embed this URL in a button or hyperlink on your site instead of using the full widget script.
                   </p>
                 </CardContent>
               </Card>
