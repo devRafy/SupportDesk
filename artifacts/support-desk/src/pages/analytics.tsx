@@ -3,8 +3,8 @@ import { useGetAnalyticsSummary, useGetAgentActivity } from "@workspace/api-clie
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
-  PieChart, Pie, Cell, Legend,
+  ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, Tooltip,
 } from "recharts";
 import { getGetAnalyticsSummaryQueryKey, getGetAgentActivityQueryKey } from "@workspace/api-client-react";
 import { MessageSquare, Users, Clock, CheckCircle, TrendingUp, Percent } from "lucide-react";
@@ -39,7 +39,6 @@ export default function Analytics() {
   });
 
   const statusData = (summary?.byStatus ?? []).map(s => ({ name: s.status, value: Number(s.count) }));
-  const botData = (summary?.botVsAgent ?? []).map(b => ({ name: b.type === "bot" ? "Bot replies" : "Agent replies", value: Number(b.count) }));
 
   return (
     <Layout>
@@ -69,7 +68,7 @@ export default function Analytics() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <Card>
+            <Card className="lg:col-span-2">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">Conversation status</CardTitle>
               </CardHeader>
@@ -83,27 +82,6 @@ export default function Analytics() {
                       <Tooltip />
                       <Legend iconSize={10} iconType="circle" />
                     </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Bot vs Agent replies</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {summaryLoading ? <Skeleton className="h-48 w-full" /> : (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={botData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip />
-                      <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                        {botData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                      </Bar>
-                    </BarChart>
                   </ResponsiveContainer>
                 )}
               </CardContent>

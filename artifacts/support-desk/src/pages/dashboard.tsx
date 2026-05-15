@@ -326,27 +326,23 @@ export default function Dashboard() {
               ) : (
                 <div className="space-y-3 px-2">
                   {(messages ?? []).map((msg: Message) => {
-                    const isAgent = msg.senderType === "agent";
-                    const isBot = msg.senderType === "bot";
                     const isVisitor = msg.senderType === "visitor";
 
                     return (
                       <div key={msg.id} className={cn("flex gap-2.5", isVisitor ? "flex-row" : "flex-row-reverse")}>
                         <div className={cn(
                           "w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 mt-1",
-                          isBot ? "bg-violet-500" : isAgent ? "bg-primary" : "bg-slate-400"
+                          isVisitor ? "bg-slate-400" : "bg-primary"
                         )}>
-                          {isBot ? "🤖" : isVisitor ? (msg.sender?.slice(0, 1)?.toUpperCase() ?? "V") : (msg.sender?.slice(0, 1)?.toUpperCase() ?? "A")}
+                          {isVisitor ? (msg.sender?.slice(0, 1)?.toUpperCase() ?? "V") : (msg.sender?.slice(0, 1)?.toUpperCase() ?? "A")}
                         </div>
                         <div className={cn("max-w-[70%] flex flex-col gap-0.5", isVisitor ? "items-start" : "items-end")}>
                           <span className="text-[11px] text-muted-foreground font-medium px-1">
-                            {isBot ? "Bot" : (msg.sender ?? (isVisitor ? "Visitor" : "Agent"))}
+                            {msg.sender ?? (isVisitor ? "Visitor" : "Agent")}
                           </span>
                           <div className={cn(
                             "rounded-2xl px-3.5 py-2.5 text-sm",
-                            isVisitor ? "bg-muted text-foreground rounded-tl-sm"
-                              : isBot ? "bg-violet-100 text-violet-900 rounded-tr-sm"
-                              : "bg-primary text-white rounded-tr-sm"
+                            isVisitor ? "bg-muted text-foreground rounded-tl-sm" : "bg-primary text-white rounded-tr-sm"
                           )}>
                             <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                           </div>

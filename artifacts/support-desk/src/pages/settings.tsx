@@ -4,12 +4,11 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import {
   useGetWorkspace, useUpdateWorkspace, useListAgents, useInviteAgent,
-  useListFaqs, useCreateFaq, useUpdateFaq, useDeleteFaq,
   useListCanned, useCreateCanned, useUpdateCanned, useDeleteCanned,
   useCreateCheckout, useCreatePortal,
-  getGetWorkspaceQueryKey, getListAgentsQueryKey, getListFaqsQueryKey, getListCannedQueryKey,
+  getGetWorkspaceQueryKey, getListAgentsQueryKey, getListCannedQueryKey,
 } from "@workspace/api-client-react";
-import type { Faq, CannedResponse } from "@workspace/api-client-react";
+import type { CannedResponse } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,14 +38,10 @@ export default function Settings() {
 
   const { data: workspace, isLoading: wsLoading } = useGetWorkspace({ query: { queryKey: getGetWorkspaceQueryKey() } });
   const { data: agents, isLoading: agentsLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
-  const { data: faqs, isLoading: faqsLoading } = useListFaqs({ query: { queryKey: getListFaqsQueryKey() } });
   const { data: canned, isLoading: cannedLoading } = useListCanned({ query: { queryKey: getListCannedQueryKey() } });
 
   const updateWs = useUpdateWorkspace();
   const inviteAgent = useInviteAgent();
-  const createFaq = useCreateFaq();
-  const updateFaq = useUpdateFaq();
-  const deleteFaq = useDeleteFaq();
   const createCanned = useCreateCanned();
   const updateCanned = useUpdateCanned();
   const deleteCanned = useDeleteCanned();
@@ -55,8 +50,6 @@ export default function Settings() {
 
   const [wsName, setWsName] = useState("");
   const [inviteForm, setInviteForm] = useState({ email: "", name: "", password: "demo1234" });
-  const [faqModal, setFaqModal] = useState<{ open: boolean; item?: Faq }>({ open: false });
-  const [faqForm, setFaqForm] = useState({ question: "", answer: "" });
   const [cannedModal, setCannedModal] = useState<{ open: boolean; item?: CannedResponse }>({ open: false });
   const [cannedForm, setCannedForm] = useState({ title: "", content: "" });
   const { wasCopied, copy } = useCopy();
@@ -87,17 +80,6 @@ export default function Settings() {
       },
       onError: () => toast({ title: "Invite failed", variant: "destructive" }),
     });
-  };
-
-  const saveFaq = () => {
-    const action = faqModal.item
-      ? updateFaq.mutateAsync({ id: faqModal.item.id, data: faqForm })
-      : createFaq.mutateAsync({ data: { question: faqForm.question, answer: faqForm.answer, keywords: [] } });
-    action.then(() => {
-      qc.invalidateQueries({ queryKey: getListFaqsQueryKey() });
-      toast({ title: faqModal.item ? "FAQ updated" : "FAQ created" });
-      setFaqModal({ open: false });
-    }).catch(() => toast({ title: "Failed to save FAQ", variant: "destructive" }));
   };
 
   const saveCanned = () => {
@@ -138,7 +120,6 @@ export default function Settings() {
               <TabsTrigger value="workspace">Workspace</TabsTrigger>
               <TabsTrigger value="agents">Agents</TabsTrigger>
               <TabsTrigger value="widget">Widget</TabsTrigger>
-              <TabsTrigger value="faqs">FAQs</TabsTrigger>
               <TabsTrigger value="canned">Canned Responses</TabsTrigger>
               <TabsTrigger value="billing">Billing</TabsTrigger>
             </TabsList>
@@ -277,36 +258,6 @@ export default function Settings() {
               </Card>
             </TabsContent>
 
-            {/* FAQs */}
-            <TabsContent value="faqs" className="mt-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">{(faqs ?? []).length} entries — the bot uses these to auto-reply</p>
-                <Button size="sm" onClick={() => { setFaqForm({ question: "", answer: "" }); setFaqModal({ open: true }); }}>
-                  <Plus className="w-4 h-4 mr-1.5" /> Add FAQ
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {faqsLoading ? <Skeleton className="h-48 w-full" /> : (faqs ?? []).map((faq) => (
-                  <Card key={faq.id}>
-                    <CardContent className="p-4 flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{faq.question}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{faq.answer}</p>
-                      </div>
-                      <div className="flex gap-1 flex-shrink-0">
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setFaqForm({ question: faq.question, answer: faq.answer }); setFaqModal({ open: true, item: faq }); }}>
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => deleteFaq.mutate({ id: faq.id }, { onSuccess: () => qc.invalidateQueries({ queryKey: getListFaqsQueryKey() }) })}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-
             {/* Canned Responses */}
             <TabsContent value="canned" className="mt-4 space-y-4">
               <div className="flex items-center justify-between">
@@ -388,27 +339,6 @@ export default function Settings() {
           </Tabs>
         </div>
       </div>
-
-      {/* FAQ Modal */}
-      <Dialog open={faqModal.open} onOpenChange={(open) => setFaqModal({ open })}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{faqModal.item ? "Edit FAQ" : "Add FAQ"}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Question</Label>
-              <Input value={faqForm.question} onChange={(e) => setFaqForm(f => ({ ...f, question: e.target.value }))} placeholder="How do I reset my password?" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Answer</Label>
-              <Textarea value={faqForm.answer} onChange={(e) => setFaqForm(f => ({ ...f, answer: e.target.value }))} rows={4} placeholder="To reset your password..." />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFaqModal({ open: false })}>Cancel</Button>
-            <Button onClick={saveFaq}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Canned Modal */}
       <Dialog open={cannedModal.open} onOpenChange={(open) => setCannedModal({ open })}>

@@ -1,8 +1,7 @@
 import { Router } from "express";
-import { db, conversationsTable, messagesTable, usersTable, faqsTable } from "@workspace/db";
-import { eq, and, desc, count, sql } from "drizzle-orm";
+import { db, conversationsTable, messagesTable, usersTable } from "@workspace/db";
+import { eq, and, desc, count } from "drizzle-orm";
 import { requireAuth, type AuthRequest } from "../lib/auth.js";
-import { botReply } from "../lib/botReply.js";
 import { getIo } from "../lib/socket.js";
 
 const router = Router();

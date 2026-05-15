@@ -137,16 +137,12 @@ export default function Widget() {
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {(messages ?? []).map((msg: Message) => {
                   const isVisitor = msg.senderType === "visitor";
-                  const isBot = msg.senderType === "bot";
 
                   return (
                     <div key={msg.id} className={cn("flex gap-2", isVisitor ? "flex-row-reverse" : "flex-row")}>
                       {!isVisitor && (
-                        <div className={cn(
-                          "w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 mt-1",
-                          isBot ? "bg-violet-500" : "bg-primary"
-                        )}>
-                          {isBot ? "🤖" : (msg.sender?.slice(0, 1)?.toUpperCase() ?? "A")}
+                        <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 mt-1">
+                          {msg.sender?.slice(0, 1)?.toUpperCase() ?? "A"}
                         </div>
                       )}
                       <div className={cn(
@@ -155,7 +151,7 @@ export default function Widget() {
                       )}>
                         {!isVisitor && (
                           <p className="text-[10px] font-semibold mb-0.5 opacity-60">
-                            {isBot ? "Bot" : (msg.sender ?? "Agent")}
+                            {msg.sender ?? "Agent"}
                           </p>
                         )}
                         <p>{msg.content}</p>

@@ -28,13 +28,6 @@ router.get("/analytics/summary", requireAuth, async (req: AuthRequest, res): Pro
   const allMessages = await db.select().from(messagesTable)
     .where(sql`${messagesTable.conversationId} IN (SELECT id FROM conversations WHERE workspace_id = ${wid})`);
 
-  const botCount = allMessages.filter((m) => m.senderType === "bot").length;
-  const agentCount = allMessages.filter((m) => m.senderType === "agent").length;
-  const botVsAgent = [
-    { type: "Bot", count: botCount },
-    { type: "Agent", count: agentCount },
-  ];
-
   const firstMessages = await db.select().from(messagesTable)
     .where(sql`${messagesTable.conversationId} IN (SELECT id FROM conversations WHERE workspace_id = ${wid}) AND ${messagesTable.senderType} = 'agent'`);
 
@@ -65,7 +58,7 @@ router.get("/analytics/summary", requireAuth, async (req: AuthRequest, res): Pro
     }
   }
 
-  res.json({ totalToday, totalThisWeek, avgFirstResponseMs, resolutionRate, byStatus, botVsAgent });
+  res.json({ totalToday, totalThisWeek, avgFirstResponseMs, resolutionRate, byStatus });
 });
 
 router.get("/analytics/agents", requireAuth, async (req: AuthRequest, res): Promise<void> => {

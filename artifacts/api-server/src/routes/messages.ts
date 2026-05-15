@@ -1,8 +1,6 @@
 import { Router } from "express";
-import { db, messagesTable, conversationsTable, usersTable, faqsTable } from "@workspace/db";
+import { db, messagesTable, conversationsTable } from "@workspace/db";
 import { eq, and, asc } from "drizzle-orm";
-import { requireAuth, type AuthRequest } from "../lib/auth.js";
-import { botReply } from "../lib/botReply.js";
 import { getIo } from "../lib/socket.js";
 
 const router = Router();
@@ -36,26 +34,6 @@ router.post("/conversations/:id/messages", async (req, res): Promise<void> => {
   const io = getIo();
   if (io) {
     io.to(`conversation:${conversationId}`).emit("message:receive", msg);
-  }
-
-  if (senderType === "visitor") {
-    const [conv] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conversationId));
-    if (conv) {
-      if (!conv.assignedAgentId) {
-        const faqs = await db.select().from(faqsTable).where(eq(faqsTable.workspaceId, conv.workspaceId));
-        const botAnswer = botReply(content, faqs);
-        const [botMsg] = await db.insert(messagesTable).values({
-          conversationId,
-          sender: "bot",
-          senderType: "bot",
-          content: botAnswer,
-          seen: false,
-        }).returning();
-        if (io) {
-          io.to(`conversation:${conversationId}`).emit("message:receive", botMsg);
-        }
-      }
-    }
   }
 
   res.status(201).json(msg);
