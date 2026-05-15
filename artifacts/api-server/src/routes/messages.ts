@@ -41,11 +41,7 @@ router.post("/conversations/:id/messages", async (req, res): Promise<void> => {
   if (senderType === "visitor") {
     const [conv] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conversationId));
     if (conv) {
-      const agents = await db.select().from(usersTable)
-        .where(and(eq(usersTable.workspaceId, conv.workspaceId), eq(usersTable.isOnline, true)));
-      const hasOnlineAgent = agents.length > 0;
-
-      if (!hasOnlineAgent || !conv.assignedAgentId) {
+      if (!conv.assignedAgentId) {
         const faqs = await db.select().from(faqsTable).where(eq(faqsTable.workspaceId, conv.workspaceId));
         const botAnswer = botReply(content, faqs);
         const [botMsg] = await db.insert(messagesTable).values({
