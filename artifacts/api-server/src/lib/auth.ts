@@ -36,6 +36,18 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   }
 }
 
+export function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction): void {
+  const header = req.headers.authorization;
+  if (header?.startsWith("Bearer ")) {
+    try {
+      req.user = verifyToken(header.slice(7));
+    } catch {
+      // invalid token — proceed as unauthenticated
+    }
+  }
+  next();
+}
+
 export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void {
   requireAuth(req, res, () => {
     if (req.user?.role !== "admin") {

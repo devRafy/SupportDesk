@@ -4,45 +4,34 @@ import { useAuth } from "@/lib/auth";
 import { useSocket } from "@/hooks/useSocket";
 import { useToast } from "@/hooks/use-toast";
 import {
-  useListConversations, useGetConversation, useListMessages, useListAgents,
+  useListConversations, useGetConversation, useListMessages,
   useSendMessage, useMarkMessagesRead, useUpdateConversationStatus, useAssignConversation,
   useListCanned,
   getListConversationsQueryKey, getListMessagesQueryKey, getGetConversationQueryKey,
-  getListCannedQueryKey, getListAgentsQueryKey,
+  getListCannedQueryKey,
 } from "@workspace/api-client-react";
 import type { Conversation, Message, CannedResponse } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageSquare, Search, Send, CheckCircle, Circle, User, Zap, RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  MessageSquare, Search, Send, CheckCircle, Circle,
+  Zap, RefreshCw, UserCheck, Inbox, Users,
+} from "lucide-react";
 
-type StatusFilter = "all" | "open" | "in_progress" | "resolved";
+type InboxTab = "queue" | "mine" | "all";
 
-const STATUS_COLORS: Record<string, string> = {
+const STATUS_DOT: Record<string, string> = {
   open: "bg-green-500",
   in_progress: "bg-yellow-500",
   resolved: "bg-slate-400",
 };
-
-function statusBadge(status: string) {
-  const colors: Record<string, string> = {
-    open: "bg-green-100 text-green-700 border-green-200",
-    in_progress: "bg-yellow-100 text-yellow-700 border-yellow-200",
-    resolved: "bg-slate-100 text-slate-600 border-slate-200",
-  };
-  return (
-    <span className={cn("text-[11px] px-1.5 py-0.5 rounded-full border font-medium", colors[status] ?? "bg-muted text-muted-foreground border-border")}>
-      {status}
-    </span>
-  );
-}
 
 function timeAgo(ts: string) {
   const diff = Date.now() - new Date(ts).getTime();
@@ -54,7 +43,14 @@ function timeAgo(ts: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-function ConversationItem({ conv, selected, onClick }: { conv: Conversation; selected: boolean; onClick: () => void }) {
+function ConversationItem({
+  conv, selected, onClick, currentUserId,
+}: {
+  conv: Conversation; selected: boolean; onClick: () => void; currentUserId: number;
+}) {
+  const isUnassigned = !conv.assignedAgentId && conv.status === "open";
+  const isMine = conv.assignedAgentId === currentUserId;
+
   return (
     <button
       onClick={onClick}
@@ -65,7 +61,7 @@ function ConversationItem({ conv, selected, onClick }: { conv: Conversation; sel
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <div className={cn("w-2 h-2 rounded-full flex-shrink-0", STATUS_COLORS[conv.status] ?? "bg-muted")} />
+          <div className={cn("w-2 h-2 rounded-full flex-shrink-0", STATUS_DOT[conv.status] ?? "bg-muted")} />
           <span className="font-medium text-sm truncate">{conv.visitorName}</span>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -77,9 +73,21 @@ function ConversationItem({ conv, selected, onClick }: { conv: Conversation; sel
           <span className="text-[11px] text-muted-foreground">{timeAgo(conv.updatedAt ?? conv.createdAt)}</span>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground truncate pl-4">
-        {conv.lastMessage ?? conv.visitorEmail}
-      </p>
+      <div className="flex items-center gap-2 pl-4">
+        <p className="text-xs text-muted-foreground truncate flex-1">
+          {conv.lastMessage ?? conv.visitorEmail}
+        </p>
+        {isUnassigned && (
+          <span className="text-[10px] bg-orange-100 text-orange-600 border border-orange-200 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">
+            Waiting
+          </span>
+        )}
+        {isMine && conv.status === "in_progress" && (
+          <span className="text-[10px] bg-blue-100 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">
+            Yours
+          </span>
+        )}
+      </div>
     </button>
   );
 }
@@ -90,7 +98,7 @@ export default function Dashboard() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("open");
+  const [tab, setTab] = useState<InboxTab>("queue");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [messageText, setMessageText] = useState("");
@@ -98,12 +106,13 @@ export default function Dashboard() {
   const [cannedSearch, setCannedSearch] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const { data: conversations, isLoading: convsLoading, refetch: refetchConvs } = useListConversations(
-    statusFilter === "all" ? {} : { status: statusFilter },
-    { query: { queryKey: getListConversationsQueryKey(statusFilter === "all" ? {} : { status: statusFilter }), refetchInterval: 15000 } }
+  // Always load all conversations and filter client-side for accurate counts
+  const { data: allConversations, isLoading: convsLoading, refetch: refetchConvs } = useListConversations(
+    {},
+    { query: { queryKey: getListConversationsQueryKey({}), refetchInterval: 15000 } }
   );
 
-  const { data: selectedConv } = useGetConversation(selectedId!, {
+  const { data: selectedConv, refetch: refetchSelected } = useGetConversation(selectedId!, {
     query: { queryKey: getGetConversationQueryKey(selectedId!), enabled: !!selectedId }
   });
 
@@ -111,49 +120,21 @@ export default function Dashboard() {
     query: { queryKey: getListMessagesQueryKey(selectedId!), enabled: !!selectedId, refetchInterval: 5000 }
   });
 
-  const { data: agents } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
   const { data: canned } = useListCanned({ query: { queryKey: getListCannedQueryKey() } });
 
   const sendMsg = useSendMessage();
   const markRead = useMarkMessagesRead();
   const updateStatus = useUpdateConversationStatus();
-  const assignConv = useAssignConversation();
+  const claimConv = useAssignConversation();
 
-  // Socket.io events
-  useEffect(() => {
-    if (!socket) return;
-    const handleNewMsg = (data: { conversationId: number }) => {
-      qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
-      if (data.conversationId === selectedId) {
-        qc.invalidateQueries({ queryKey: getListMessagesQueryKey(data.conversationId) });
-      }
-    };
-    const handleConvUpdated = () => {
-      qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
-    };
-    socket.on("new_message", handleNewMsg);
-    socket.on("conversation_updated", handleConvUpdated);
-    return () => {
-      socket.off("new_message", handleNewMsg);
-      socket.off("conversation_updated", handleConvUpdated);
-    };
-  }, [socket, selectedId, qc]);
+  // Filtered views
+  const userId = user?.id ?? 0;
+  const queue = (allConversations ?? []).filter(c => !c.assignedAgentId && c.status === "open");
+  const mine = (allConversations ?? []).filter(c => c.assignedAgentId === userId && c.status !== "resolved");
+  const all = allConversations ?? [];
 
-  // Join conversation room + mark read
-  useEffect(() => {
-    if (!selectedId || !socket) return;
-    socket.emit("join_conversation", { conversationId: selectedId });
-    markRead.mutate({ id: selectedId }, {
-      onSuccess: () => qc.invalidateQueries({ queryKey: getListConversationsQueryKey() })
-    });
-  }, [selectedId, socket]); // eslint-disable-line
-
-  // Auto-scroll
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const filteredConvs = (conversations ?? []).filter(c =>
+  const baseList = tab === "queue" ? queue : tab === "mine" ? mine : all;
+  const filteredConvs = baseList.filter(c =>
     !search ||
     c.visitorName.toLowerCase().includes(search.toLowerCase()) ||
     c.visitorEmail.toLowerCase().includes(search.toLowerCase())
@@ -162,6 +143,59 @@ export default function Dashboard() {
   const filteredCanned = (canned ?? []).filter(c =>
     !cannedSearch || c.title.toLowerCase().includes(cannedSearch.toLowerCase())
   );
+
+  // Socket.io events
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewMsg = (data: { conversationId: number }) => {
+      qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+      if (data.conversationId === selectedId) {
+        qc.invalidateQueries({ queryKey: getListMessagesQueryKey(data.conversationId) });
+      }
+    };
+
+    const handleClaimed = (data: { conversationId: number; agentId: number }) => {
+      qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+      if (selectedId === data.conversationId) {
+        refetchSelected();
+      }
+      // If someone else claimed the conversation the current agent was viewing
+      if (data.agentId !== userId && selectedId === data.conversationId) {
+        toast({ title: "Conversation claimed by another agent" });
+      }
+    };
+
+    const handleNewConv = () => {
+      qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+      if (tab === "queue") {
+        toast({ title: "New conversation in queue", description: "A visitor just started a chat." });
+      }
+    };
+
+    socket.on("new_message", handleNewMsg);
+    socket.on("conversation:claimed", handleClaimed);
+    socket.on("conversation:new", handleNewConv);
+    return () => {
+      socket.off("new_message", handleNewMsg);
+      socket.off("conversation:claimed", handleClaimed);
+      socket.off("conversation:new", handleNewConv);
+    };
+  }, [socket, selectedId, qc, userId, tab]); // eslint-disable-line
+
+  // Join conversation room + mark read when selecting
+  useEffect(() => {
+    if (!selectedId || !socket) return;
+    socket.emit("agent:join", selectedId);
+    markRead.mutate({ id: selectedId }, {
+      onSuccess: () => qc.invalidateQueries({ queryKey: getListConversationsQueryKey() })
+    });
+  }, [selectedId, socket]); // eslint-disable-line
+
+  // Auto-scroll to latest message
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const handleSend = () => {
     if (!messageText.trim() || !selectedId) return;
@@ -174,6 +208,8 @@ export default function Dashboard() {
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: getListMessagesQueryKey(selectedId) });
           qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+          // Refresh selected conv in case it was just claimed
+          refetchSelected();
         },
         onError: () => toast({ title: "Failed to send", variant: "destructive" }),
       }
@@ -182,7 +218,7 @@ export default function Dashboard() {
 
   const handleTyping = () => {
     if (!socket || !selectedId) return;
-    socket.emit("agent_typing", { conversationId: selectedId });
+    socket.emit("agent:typing", { conversationId: selectedId });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -206,18 +242,29 @@ export default function Dashboard() {
     );
   };
 
-  const handleAssign = (agentId: string) => {
-    if (!selectedId) return;
-    assignConv.mutate(
-      { id: selectedId, data: { agentId: Number(agentId) } },
+  const handleClaim = () => {
+    if (!selectedId || !userId) return;
+    claimConv.mutate(
+      { id: selectedId, data: { agentId: userId } },
       {
         onSuccess: () => {
-          if (selectedId) qc.invalidateQueries({ queryKey: getGetConversationQueryKey(selectedId) });
-          toast({ title: "Conversation assigned" });
+          qc.invalidateQueries({ queryKey: getListConversationsQueryKey() });
+          qc.invalidateQueries({ queryKey: getGetConversationQueryKey(selectedId) });
+          toast({ title: "Conversation claimed — it's yours now" });
+          setTab("mine");
         },
       }
     );
   };
+
+  const isUnassigned = selectedConv && !selectedConv.assignedAgentId && selectedConv.status === "open";
+  const isMyConv = selectedConv?.assignedAgentId === userId;
+
+  const tabs: { value: InboxTab; label: string; icon: React.ElementType; count: number }[] = [
+    { value: "queue", label: "Queue", icon: Inbox, count: queue.length },
+    { value: "mine", label: "Mine", icon: UserCheck, count: mine.length },
+    { value: "all", label: "All", icon: Users, count: all.length },
+  ];
 
   return (
     <Layout>
@@ -235,25 +282,35 @@ export default function Dashboard() {
               </Button>
             </div>
             <div className="flex gap-1">
-              {([
-                { value: "open", label: "Open" },
-                { value: "in_progress", label: "Active" },
-                { value: "resolved", label: "Done" },
-                { value: "all", label: "All" },
-              ] as { value: StatusFilter; label: string }[]).map(({ value, label }) => (
+              {tabs.map(({ value, label, icon: Icon, count }) => (
                 <button
                   key={value}
-                  onClick={() => setStatusFilter(value)}
+                  onClick={() => setTab(value)}
                   className={cn(
-                    "flex-1 text-[11px] font-medium py-1 rounded transition-colors",
-                    statusFilter === value ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    "flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded text-[10px] font-medium transition-colors",
+                    tab === value ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   )}
                 >
-                  {label}
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>{label}</span>
+                  {count > 0 && (
+                    <span className={cn(
+                      "min-w-[16px] h-4 rounded-full text-[9px] font-bold flex items-center justify-center px-1",
+                      tab === value ? "bg-white/30 text-white" : "bg-muted text-muted-foreground"
+                    )}>
+                      {count}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
           </div>
+
+          {tab === "queue" && queue.length === 0 && !convsLoading && (
+            <div className="px-4 py-3 bg-green-50 border-b border-green-100">
+              <p className="text-xs text-green-700 font-medium">All clear — no waiting visitors</p>
+            </div>
+          )}
 
           <ScrollArea className="flex-1">
             {convsLoading ? (
@@ -263,11 +320,19 @@ export default function Dashboard() {
             ) : filteredConvs.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-48 text-center px-4">
                 <MessageSquare className="w-8 h-8 text-muted-foreground/40 mb-2" />
-                <p className="text-sm text-muted-foreground">No {statusFilter} conversations</p>
+                <p className="text-sm text-muted-foreground">
+                  {tab === "queue" ? "No visitors waiting" : tab === "mine" ? "No active conversations" : "No conversations yet"}
+                </p>
               </div>
             ) : (
               filteredConvs.map((conv) => (
-                <ConversationItem key={conv.id} conv={conv} selected={conv.id === selectedId} onClick={() => setSelectedId(conv.id)} />
+                <ConversationItem
+                  key={conv.id}
+                  conv={conv}
+                  selected={conv.id === selectedId}
+                  onClick={() => setSelectedId(conv.id)}
+                  currentUserId={userId}
+                />
               ))
             )}
           </ScrollArea>
@@ -279,32 +344,51 @@ export default function Dashboard() {
             <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
               <MessageSquare className="w-8 h-8 text-primary" />
             </div>
-            <h2 className="font-semibold text-lg mb-1">Select a conversation</h2>
-            <p className="text-muted-foreground text-sm max-w-xs">Choose a conversation from the list to start chatting with your customers.</p>
+            <h2 className="font-semibold text-lg mb-1">
+              {tab === "queue" ? "Pick up a conversation" : "Select a conversation"}
+            </h2>
+            <p className="text-muted-foreground text-sm max-w-xs">
+              {tab === "queue"
+                ? "Choose a waiting visitor from the queue and claim it to start chatting."
+                : "Choose a conversation from the list on the left."}
+            </p>
           </div>
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Header */}
             <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-background flex-shrink-0">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="font-semibold text-sm">{selectedConv?.visitorName}</h2>
-                  {selectedConv && statusBadge(selectedConv.status)}
+                  {isUnassigned && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-300 text-orange-600 bg-orange-50">
+                      Unassigned
+                    </Badge>
+                  )}
+                  {isMyConv && selectedConv?.status === "in_progress" && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-300 text-blue-600 bg-blue-50">
+                      Assigned to you
+                    </Badge>
+                  )}
+                  {selectedConv?.status === "resolved" && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-slate-300 text-slate-500">
+                      Resolved
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">{selectedConv?.visitorEmail}</p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <Select onValueChange={handleAssign} value={selectedConv?.assignedAgentId?.toString() ?? ""}>
-                  <SelectTrigger className="h-8 text-xs w-32">
-                    <User className="w-3.5 h-3.5 mr-1.5" />
-                    <SelectValue placeholder="Assign" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(agents ?? []).map(a => (
-                      <SelectItem key={a.id} value={String(a.id)} className="text-xs">{a.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {isUnassigned && (
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs gap-1.5 bg-orange-500 hover:bg-orange-600"
+                    onClick={handleClaim}
+                    disabled={claimConv.isPending}
+                  >
+                    <UserCheck className="w-3.5 h-3.5" /> Claim
+                  </Button>
+                )}
                 {selectedConv?.status !== "resolved" ? (
                   <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => handleStatus("resolved")} disabled={updateStatus.isPending}>
                     <CheckCircle className="w-3.5 h-3.5 text-green-500" /> Resolve
@@ -316,6 +400,16 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
+
+            {/* Auto-claim hint banner */}
+            {isUnassigned && (
+              <div className="bg-orange-50 border-b border-orange-100 px-5 py-2 flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
+                <p className="text-xs text-orange-700">
+                  This visitor is waiting. <span className="font-medium">Send a reply to automatically claim this conversation.</span>
+                </p>
+              </div>
+            )}
 
             {/* Messages */}
             <ScrollArea className="flex-1 p-4">
@@ -394,7 +488,7 @@ export default function Dashboard() {
                     value={messageText}
                     onChange={(e) => { setMessageText(e.target.value); handleTyping(); }}
                     onKeyDown={handleKeyDown}
-                    placeholder="Reply to customer… (Enter to send, Shift+Enter for newline)"
+                    placeholder={isUnassigned ? "Reply to claim & respond…" : "Reply to customer… (Enter to send)"}
                     className="flex-1 min-h-[40px] max-h-32 resize-none text-sm py-2"
                     rows={1}
                   />
